@@ -88,13 +88,15 @@ def setup_database():
         """)
         logger.info("Neron table created/verified")
 
-        # Create index for vector similarity search (optional but recommended)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS neron_embedding_idx
-            ON neron USING ivfflat (embedding vector_cosine_ops)
-            WITH (lists = 100);
-        """)
-        logger.info("Vector index created/verified")
+        # Note: ivfflat index is not created for small datasets (< ~1000 rows)
+        # as it can cause queries to return incorrect results.
+        # For larger datasets, uncomment the following:
+        # cursor.execute("""
+        #     CREATE INDEX IF NOT EXISTS neron_embedding_idx
+        #     ON neron USING ivfflat (embedding vector_cosine_ops)
+        #     WITH (lists = 100);
+        # """)
+        logger.info("Database setup complete (no index for small datasets)")
 
         conn.commit()
         cursor.close()
@@ -206,13 +208,14 @@ def query_similar_messages(
 
         # Query using cosine similarity
         # Note: 1 - (embedding <=> %s) converts distance to similarity score
+        # Cast the list to vector type using ::vector
         if similarity_threshold is not None:
             cursor.execute(
                 """
-                SELECT id, text, timestamp, 1 - (embedding <=> %s) as similarity
+                SELECT id, text, timestamp, 1 - (embedding <=> %s::vector) as similarity
                 FROM neron
-                WHERE 1 - (embedding <=> %s) >= %s
-                ORDER BY embedding <=> %s
+                WHERE 1 - (embedding <=> %s::vector) >= %s
+                ORDER BY embedding <=> %s::vector
                 LIMIT %s;
                 """,
                 (query_embedding, query_embedding, similarity_threshold, query_embedding, limit)
@@ -220,9 +223,9 @@ def query_similar_messages(
         else:
             cursor.execute(
                 """
-                SELECT id, text, timestamp, 1 - (embedding <=> %s) as similarity
+                SELECT id, text, timestamp, 1 - (embedding <=> %s::vector) as similarity
                 FROM neron
-                ORDER BY embedding <=> %s
+                ORDER BY embedding <=> %s::vector
                 LIMIT %s;
                 """,
                 (query_embedding, query_embedding, limit)
