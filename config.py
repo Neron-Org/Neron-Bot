@@ -31,6 +31,10 @@ DB_MAX_CONNECTIONS = int(os.getenv('DB_MAX_CONNECTIONS', '10'))
 VOYAGE_MODEL = 'voyage-3-large'
 EMBEDDING_DIMENSION = 1024
 
+# User Access Control
+# If empty list, no restrictions. If populated, only these user_ids can use the bot.
+ALLOWED_USERS = [1890816031]
+
 # Validate required environment variables
 def validate_config():
     """Validate that all required environment variables are set."""

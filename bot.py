@@ -33,11 +33,22 @@ voyage_client = voyageai.Client(api_key=config.VOYAGE_API_KEY)
 openai_client = OpenAI(api_key=config.OPENAI_API_KEY)
 
 
+def is_user_allowed(user_id: int) -> bool:
+    """Check if user is allowed to use the bot."""
+    if not config.ALLOWED_USERS:
+        return True
+    return user_id in config.ALLOWED_USERS
+
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Handler for /start command.
     Sends a welcome message to the user.
     """
+    if not is_user_allowed(update.effective_user.id):
+        await update.message.reply_text("hey, its not yours, go fuck yourself")
+        return
+
     welcome_message = (
         "Welcome! I'm your personal memory bot.\n\n"
         "Send me text or voice messages, and I'll store them with embeddings for future retrieval.\n\n"
@@ -54,6 +65,10 @@ async def count_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     Handler for /count command.
     Shows the total number of messages stored in the database.
     """
+    if not is_user_allowed(update.effective_user.id):
+        await update.message.reply_text("hey, its not yours, go fuck yourself")
+        return
+
     try:
         count = db.get_message_count()
         await update.message.reply_text(f"Total messages stored: {count}")
@@ -127,6 +142,10 @@ async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     Usage: /search <query text>
     """
+    if not is_user_allowed(update.effective_user.id):
+        await update.message.reply_text("hey, its not yours, go fuck yourself")
+        return
+
     try:
         # Extract query text
         if not context.args:
@@ -190,6 +209,10 @@ async def handle_search_callback(update: Update, context: ContextTypes.DEFAULT_T
     """
     query = update.callback_query
     await query.answer()
+
+    if not is_user_allowed(update.effective_user.id):
+        await query.message.reply_text("hey, its not yours, go fuck yourself")
+        return
 
     try:
         callback_data = query.data
@@ -281,6 +304,10 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     Handler for text messages.
     Gets embedding and stores the message in the database.
     """
+    if not is_user_allowed(update.effective_user.id):
+        await update.message.reply_text("hey, its not yours, go fuck yourself")
+        return
+
     try:
         # Get the message text
         text = update.message.text
@@ -315,6 +342,10 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
     Handler for voice messages.
     Transcribes the audio, gets embedding, and stores in the database.
     """
+    if not is_user_allowed(update.effective_user.id):
+        await update.message.reply_text("hey, its not yours, go fuck yourself")
+        return
+
     try:
         # Get voice message info
         voice = update.message.voice
@@ -372,6 +403,10 @@ async def handle_audio_message(update: Update, context: ContextTypes.DEFAULT_TYP
     Handler for audio messages (same as voice, but for audio files).
     Transcribes the audio, gets embedding, and stores in the database.
     """
+    if not is_user_allowed(update.effective_user.id):
+        await update.message.reply_text("hey, its not yours, go fuck yourself")
+        return
+
     try:
         # Get audio message info
         audio = update.message.audio
