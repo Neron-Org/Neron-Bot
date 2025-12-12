@@ -49,10 +49,66 @@ def get_connection():
     return connection_pool.getconn()
 
 
-def return_connection(conn):
-    """Return a connection to the pool."""
+def return_connection(conn, close=False):
+    """
+    Return a connection to the pool.
+
+    Args:
+        conn: The connection to return
+        close: If True, close the connection instead of returning it to the pool
+    """
     if connection_pool is not None:
-        connection_pool.putconn(conn)
+        if close:
+            # Close bad connection and don't return it to pool
+            connection_pool.putconn(conn, close=True)
+        else:
+            connection_pool.putconn(conn)
+
+
+def get_valid_connection(max_retries=3):
+    """
+    Get a valid connection from the pool with retry logic.
+    Tests the connection before returning it.
+
+    Args:
+        max_retries: Maximum number of retry attempts
+
+    Returns:
+        A valid database connection
+
+    Raises:
+        Exception: If unable to get a valid connection after max_retries
+    """
+    for attempt in range(max_retries):
+        conn = None
+        try:
+            conn = get_connection()
+
+            # Test the connection with a simple query
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1;")
+            cursor.fetchone()
+            cursor.close()
+
+            # Connection is valid
+            return conn
+
+        except Exception as e:
+            logger.warning(f"Connection validation failed (attempt {attempt + 1}/{max_retries}): {e}")
+
+            # Close the bad connection
+            if conn:
+                try:
+                    return_connection(conn, close=True)
+                except Exception:
+                    pass
+
+            # If this was the last attempt, raise the error
+            if attempt == max_retries - 1:
+                raise RuntimeError(f"Failed to get valid connection after {max_retries} attempts") from e
+
+    # Should never reach here, but just in case
+    raise RuntimeError("Failed to get valid connection")
 
 
 def close_pool():
@@ -70,7 +126,7 @@ def setup_database():
     """
     conn = None
     try:
-        conn = get_connection()
+        conn = get_valid_connection()
         cursor = conn.cursor()
 
         # Enable pgvector extension
@@ -127,8 +183,9 @@ def insert_message(text: str, embedding: List[float], timestamp: Optional[dateti
         Exception: If the insert operation fails
     """
     conn = None
+    close_conn = False
     try:
-        conn = get_connection()
+        conn = get_valid_connection()
         cursor = conn.cursor()
 
         # Validate embedding dimension
@@ -167,12 +224,16 @@ def insert_message(text: str, embedding: List[float], timestamp: Optional[dateti
 
     except Exception as e:
         logger.error(f"Error inserting message: {e}")
+        close_conn = True  # Mark connection as bad
         if conn:
-            conn.rollback()
+            try:
+                conn.rollback()
+            except Exception:
+                pass  # Connection might be already closed
         raise
     finally:
         if conn:
-            return_connection(conn)
+            return_connection(conn, close=close_conn)
 
 
 def query_similar_messages(
@@ -195,8 +256,9 @@ def query_similar_messages(
         Exception: If the query operation fails
     """
     conn = None
+    close_conn = False
     try:
-        conn = get_connection()
+        conn = get_valid_connection()
         cursor = conn.cursor()
 
         # Validate embedding dimension
@@ -239,10 +301,11 @@ def query_similar_messages(
 
     except Exception as e:
         logger.error(f"Error querying similar messages: {e}")
+        close_conn = True  # Mark connection as bad
         raise
     finally:
         if conn:
-            return_connection(conn)
+            return_connection(conn, close=close_conn)
 
 
 def get_message_count() -> int:
@@ -253,8 +316,9 @@ def get_message_count() -> int:
         Total count of messages
     """
     conn = None
+    close_conn = False
     try:
-        conn = get_connection()
+        conn = get_valid_connection()
         cursor = conn.cursor()
 
         cursor.execute("SELECT COUNT(*) FROM neron;")
@@ -265,10 +329,11 @@ def get_message_count() -> int:
 
     except Exception as e:
         logger.error(f"Error getting message count: {e}")
+        close_conn = True  # Mark connection as bad
         raise
     finally:
         if conn:
-            return_connection(conn)
+            return_connection(conn, close=close_conn)
 
 
 if __name__ == '__main__':
